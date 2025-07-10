@@ -7,6 +7,8 @@ A Go-based backend service for a portfolio application.
 - Go 1.22+
 - direnv (for environment variable management)
 - Air (for hot reload during development)
+- Goose (for database migrations)
+- PostgreSQL (database)
 
 ## Environment Setup with direnv
 
@@ -64,6 +66,52 @@ You can verify the installation by checking the version:
 air -v
 ```
 
+### Installing Goose (Database Migrations)
+
+Goose is a database migration tool that supports SQL migrations and Go functions.
+
+#### Installation
+
+Install Goose globally using Go:
+
+```bash
+go install github.com/pressly/goose/v3/cmd/goose@latest
+```
+
+You can verify the installation by checking the version:
+
+```bash
+goose -version
+```
+
+#### Usage
+
+Goose migrations are located in the `cmd/migrate/migrations/` directory.
+
+**Create a new migration:**
+
+```bash
+goose -dir cmd/migrate/migrations -s create migration_name sql
+```
+
+**Run migrations:**
+
+```bash
+goose -dir cmd/migrate/migrations postgres "postgres://admin:password@localhost:5432/portfolio?sslmode=disable" up
+```
+
+**Check migration status:**
+
+```bash
+goose -dir cmd/migrate/migrations postgres "postgres://admin:password@localhost:5432/portfolio?sslmode=disable" status
+```
+
+**Rollback last migration:**
+
+```bash
+goose -dir cmd/migrate/migrations postgres "postgres://admin:password@localhost:5432/portfolio?sslmode=disable" down
+```
+
 ### Using direnv in this project
 
 1. **First time setup**: When you first clone this repository and enter the directory, direnv will show a warning that the `.envrc` file is blocked. Allow it by running:
@@ -89,6 +137,18 @@ The `.envrc` file currently sets:
 
 - `ADDR=":8080"` - The server address and port
 
+You can add database configuration to your `.envrc` file:
+
+```bash
+export ADDR=":8080"
+export DB_ADDR="postgres://admin:password@localhost:5432/portfolio?sslmode=disable"
+export DB_MAX_OPEN_CONNS=30
+export DB_MAX_IDLE_CONNS=30
+export DB_MAX_IDLE_TIME="15m"
+```
+
+After editing, run `direnv allow` to load the new variables.
+
 ### Verifying direnv is working
 
 You can verify that environment variables are loaded by:
@@ -102,21 +162,110 @@ echo $ADDR  # Should output ":8080"
 ```text
 ├── .envrc              # Environment variables (auto-loaded by direnv)
 ├── .air.toml           # Air configuration for hot reload
+├── Makefile            # Build automation and common tasks
+├── docker-compose.yml  # PostgreSQL database configuration
 ├── go.mod              # Go module definition
 ├── go.sum              # Go module checksums
 ├── bin/                # Compiled binaries
 ├── cmd/                # Application entry points
 │   ├── api/            # API server
 │   └── migrate/        # Database migrations
+│       └── migrations/ # Goose migration files
 ├── docs/               # Documentation
 ├── internal/           # Private application code
 │   └── env/            # Environment configuration
 └── scripts/            # Build and deployment scripts
 ```
 
+## Quick Start
+
+This project includes a Makefile for common development tasks. To see all available commands:
+
+```bash
+make help
+```
+
+### One-command setup
+
+```bash
+# Install tools, start database, and run migrations
+make install-tools
+make setup
+```
+
+### Common commands
+
+```bash
+# Development
+make dev              # Start with hot reload
+make run              # Run without hot reload
+make build            # Build the application
+
+# Database
+make docker-up        # Start PostgreSQL
+make migration-up     # Run migrations
+make migration-status # Check migration status
+
+# Code quality
+make fmt              # Format code
+make lint             # Run linter
+make test             # Run tests
+make all              # Format, lint, test, and build
+```
+
+## Database Setup
+
+This project uses PostgreSQL as the database and Goose for migrations.
+
+### Starting the Database
+
+The project includes a `docker-compose.yml` file for easy database setup:
+
+```bash
+# Start PostgreSQL in the background
+docker-compose up -d --build
+
+# Verify it's running
+docker-compose ps
+```
+
+The database will be available at:
+
+- **Host:** localhost:5432
+- **Database:** portfolio
+- **Username:** admin
+- **Password:** password
+
+### Running Migrations
+
+After starting the database, run the migrations to set up the schema:
+
+```bash
+# Run all pending migrations
+goose -dir cmd/migrate/migrations postgres "postgres://admin:password@localhost:5432/portfolio?sslmode=disable" up
+
+# Check migration status
+goose -dir cmd/migrate/migrations postgres "postgres://admin:password@localhost:5432/portfolio?sslmode=disable" status
+```
+
 ## Development
 
-### Running the API server
+### Using Makefile (Recommended)
+
+The project includes a Makefile with convenient commands:
+
+```bash
+# Start development server with hot reload
+make dev
+
+# Run without hot reload
+make run
+
+# Build the application
+make build
+```
+
+### Running the API server manually
 
 #### With Air (Hot Reload - Recommended for development)
 
@@ -134,7 +283,7 @@ Air will watch for file changes and automatically rebuild and restart the server
 go run cmd/api/*.go
 ```
 
-### Building
+### Building manually
 
 ```bash
 go build -o ./bin/main.exe ./cmd/api
@@ -155,6 +304,14 @@ go build -o ./bin/main.exe ./cmd/api
 - **Air not detecting changes**: Check that your file extensions are included in the `.air.toml` configuration
 - **Port already in use**: Make sure no other instance of the server is running, or change the `ADDR` in `.envrc`
 - **Build errors**: Check the `build-errors.log` file created by Air for detailed error information
+
+### Database & Goose
+
+- **"goose: command not found"**: Make sure Goose is installed with `go install github.com/pressly/goose/v3/cmd/goose@latest`
+- **Connection refused error**: Ensure PostgreSQL is running with `docker-compose up -d`
+- **Migration failed**: Check that the database connection string is correct and the database exists
+- **Permission denied**: Verify the database user has the necessary permissions to create tables and run migrations
+- **Migration file format**: Ensure migration files follow the Goose naming convention: `YYYYMMDDHHMMSS_description.sql`
 
 ## Contributing
 
