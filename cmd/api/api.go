@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/vatanak10/portfolio-backend/internal/store"
@@ -13,6 +15,7 @@ import (
 type application struct {
 	config config
 	store  *store.Storage
+	logger *zap.SugaredLogger
 }
 
 type config struct {
@@ -39,6 +42,14 @@ func (app *application) mount() http.Handler {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", app.healthCheckHandler)
+
+		r.Route("/experiences", func(r chi.Router) {
+			r.Post("/", app.createExperienceHandler)
+			// r.Get("/", app.listExperiencesHandler)
+			// r.Get("/{id}", app.getExperienceHandler)
+			// r.Put("/{id}", app.updateExperienceHandler)
+			// r.Delete("/{id}", app.deleteExperienceHandler)
+		})
 	})
 
 	return r

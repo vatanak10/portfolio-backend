@@ -1,1 +1,1 @@
-CREATE DATABASE portfolio;
+CREATE DATABASE IF NOT EXISTS portfolio;

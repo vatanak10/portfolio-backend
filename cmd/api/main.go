@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 
+	"go.uber.org/zap"
+
 	"github.com/vatanak10/portfolio-backend/internal/db"
 	"github.com/vatanak10/portfolio-backend/internal/env"
 	"github.com/vatanak10/portfolio-backend/internal/store"
@@ -36,7 +38,13 @@ func main() {
 
 	store := store.NewPostgresStorage(db)
 
-	app := &application{config: cfg, store: store}
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Panic(err)
+	}
+	defer logger.Sync()
+
+	app := &application{config: cfg, store: store, logger: logger.Sugar()}
 
 	mux := app.mount()
 
