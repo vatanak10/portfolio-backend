@@ -20,6 +20,9 @@ type Storage struct {
 		Get(context.Context, string) (*Experience, error)
 		Update(context.Context, *Experience) error
 		Delete(context.Context, string) error
+		Restore(context.Context, string) error
+		HardDelete(context.Context, string) error
+		ListDeleted(context.Context, ...PaginationParams) (*PaginatedResponse[*Experience], error)
 	}
 }
 
