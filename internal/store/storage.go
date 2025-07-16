@@ -16,7 +16,7 @@ var (
 type Storage struct {
 	Experiences interface {
 		Create(context.Context, *Experience) error
-		List(context.Context) ([]*Experience, error)
+		List(context.Context, ...PaginationParams) (*PaginatedResponse[*Experience], error)
 		Get(context.Context, string) (*Experience, error)
 	}
 }

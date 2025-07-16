@@ -39,11 +39,39 @@ func (s *ExperiencesStore) Create(ctx context.Context, experience *Experience) e
 	return nil
 }
 
-func (s *ExperiencesStore) List(ctx context.Context) ([]*Experience, error) {
-	query := `SELECT id, title, description, company, start_date, end_date, created_at, updated_at 
-			  FROM experiences ORDER BY created_at DESC`
+func (s *ExperiencesStore) List(ctx context.Context, params ...PaginationParams) (*PaginatedResponse[*Experience], error) {
+	// First, get the total count
+	countQuery := `SELECT COUNT(*) FROM experiences`
 
-	rows, err := s.db.QueryContext(ctx, query)
+	var total int
+	if err := s.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	var query string
+	var args []interface{}
+	var limit, offset int
+
+	// Check if pagination parameters are provided, if not use default values
+	if len(params) > 0 && (params[0].Limit > 0 || params[0].Offset > 0) {
+		// Use pagination
+		p := params[0]
+		limit = p.Limit
+		offset = p.Offset
+		query = `SELECT id, title, description, company, start_date, end_date, created_at, updated_at 
+				 FROM experiences ORDER BY created_at DESC
+				 LIMIT $1 OFFSET $2`
+		args = []interface{}{limit, offset}
+	} else {
+		// No pagination - return all results
+		limit = 10 // Default limit
+		offset = 0
+		query = `SELECT id, title, description, company, start_date, end_date, created_at, updated_at 
+				 FROM experiences ORDER BY created_at DESC`
+		args = []interface{}{}
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +92,13 @@ func (s *ExperiencesStore) List(ctx context.Context) ([]*Experience, error) {
 		return nil, err
 	}
 
-	return experiences, nil
+	// Create pagination metadata
+	metadata := NewPaginationMetadata(limit, offset, total)
+
+	return &PaginatedResponse[*Experience]{
+		Data:       experiences,
+		Pagination: metadata,
+	}, nil
 }
 
 func (s *ExperiencesStore) Get(ctx context.Context, id string) (*Experience, error) {

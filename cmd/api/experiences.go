@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/vatanak10/portfolio-backend/internal/store"
@@ -52,13 +53,39 @@ func (app *application) createExperienceHandler(w http.ResponseWriter, r *http.R
 func (app *application) listExperiencesHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	experiences, err := app.store.Experiences.List(ctx)
+	// Check if pagination parameters are provided
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+
+	var result *store.PaginatedResponse[*store.Experience]
+	var err error
+
+	// If pagination parameters are provided, use them
+	if limitStr != "" || offsetStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			limit = 10 // Default limit
+		}
+
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 {
+			offset = 0 // Default offset
+		}
+
+		params := store.NewPaginationParams(limit, offset)
+		result, err = app.store.Experiences.List(ctx, params)
+	} else {
+		// No pagination parameters - get all results
+		result, err = app.store.Experiences.List(ctx)
+	}
+
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
 
-	if err := app.jsonResponse(w, http.StatusOK, experiences); err != nil {
+	// Return the result
+	if err := writeJSON(w, http.StatusOK, result); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
