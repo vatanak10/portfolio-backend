@@ -8,7 +8,7 @@ import (
 )
 
 type Experience struct {
-	ID          string   `json:"id"`
+	ID          int64    `json:"id"`
 	Title       string   `json:"title"`
 	Description []string `json:"description"`
 	Company     string   `json:"company"`
@@ -119,4 +119,44 @@ func (s *ExperiencesStore) Get(ctx context.Context, id string) (*Experience, err
 	}
 
 	return &experience, nil
+}
+
+func (s *ExperiencesStore) Update(ctx context.Context, experience *Experience) error {
+	query := `UPDATE experiences 
+			  SET title = $1, description = $2, company = $3, start_date = $4, end_date = $5, updated_at = NOW() 
+			  WHERE id = $6`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	_, err := s.db.ExecContext(ctx, query,
+		experience.Title, pq.Array(experience.Description), experience.Company,
+		experience.StartDate, experience.EndDate, experience.ID)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (s *ExperiencesStore) Delete(ctx context.Context, id string) error {
+	query := `DELETE FROM experiences WHERE id = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	_, err := s.db.ExecContext(ctx, query, id)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	return nil
 }

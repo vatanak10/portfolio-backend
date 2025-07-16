@@ -8,7 +8,7 @@ import (
 	"github.com/vatanak10/portfolio-backend/internal/store"
 )
 
-type createExperiencePayload struct {
+type experiencePayload struct {
 	Title       string   `json:"title" validate:"required"`
 	Description []string `json:"description" validate:"required"`
 	Company     string   `json:"company" validate:"required"`
@@ -17,7 +17,7 @@ type createExperiencePayload struct {
 }
 
 func (app *application) createExperienceHandler(w http.ResponseWriter, r *http.Request) {
-	var payload createExperiencePayload
+	var payload experiencePayload
 
 	if err := readJSON(w, r, &payload); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -74,6 +74,11 @@ func (app *application) listExperiencesHandler(w http.ResponseWriter, r *http.Re
 
 		params := store.NewPaginationParams(limit, offset)
 		result, err = app.store.Experiences.List(ctx, params)
+
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
 	} else {
 		// No pagination parameters - get all results
 		result, err = app.store.Experiences.List(ctx)
@@ -103,6 +108,70 @@ func (app *application) getExperienceHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := app.jsonResponse(w, http.StatusOK, experience); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+}
+
+func (app *application) updateExperienceHandler(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var payload experiencePayload
+
+	if err := readJSON(w, r, &payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if err := Validate.Struct(payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	ctx := r.Context()
+
+	experience, err := app.store.Experiences.Get(ctx, id)
+	if err != nil {
+		app.notFoundResponse(w, r, err)
+		return
+	}
+
+	experience.Title = payload.Title
+	experience.Description = payload.Description
+	experience.Company = payload.Company
+	experience.StartDate = payload.StartDate
+	experience.EndDate = payload.EndDate
+
+	// Convert id from string to int64
+	idInt, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	experience.ID = idInt
+
+	if err := app.store.Experiences.Update(ctx, experience); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := app.jsonResponse(w, http.StatusOK, experience); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+}
+
+func (app *application) deleteExperienceHandler(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	ctx := r.Context()
+
+	if err := app.store.Experiences.Delete(ctx, id); err != nil {
+		app.notFoundResponse(w, r, err)
+		return
+	}
+
+	if err := app.jsonResponse(w, http.StatusOK, map[string]string{"message": "deleted successfully"}); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

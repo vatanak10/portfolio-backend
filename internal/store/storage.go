@@ -18,6 +18,8 @@ type Storage struct {
 		Create(context.Context, *Experience) error
 		List(context.Context, ...PaginationParams) (*PaginatedResponse[*Experience], error)
 		Get(context.Context, string) (*Experience, error)
+		Update(context.Context, *Experience) error
+		Delete(context.Context, string) error
 	}
 }
 
