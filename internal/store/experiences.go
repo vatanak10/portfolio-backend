@@ -24,8 +24,6 @@ type ExperiencesStore struct {
 }
 
 func (s *ExperiencesStore) Create(ctx context.Context, experience *Experience) error {
-	// Implement the logic to create an experience in the database
-	// This is a placeholder implementation
 
 	query := `INSERT INTO experiences (title, description, company, start_date, end_date) 
 			  VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at, updated_at`
@@ -39,4 +37,32 @@ func (s *ExperiencesStore) Create(ctx context.Context, experience *Experience) e
 	}
 
 	return nil
+}
+
+func (s *ExperiencesStore) List(ctx context.Context) ([]*Experience, error) {
+	query := `SELECT id, title, description, company, start_date, end_date, created_at, updated_at 
+			  FROM experiences ORDER BY created_at DESC`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var experiences []*Experience
+	for rows.Next() {
+		var experience Experience
+		if err := rows.Scan(&experience.ID, &experience.Title, pq.Array(&experience.Description),
+			&experience.Company, &experience.StartDate, &experience.EndDate,
+			&experience.CreatedAt, &experience.UpdatedAt); err != nil {
+			return nil, err
+		}
+		experiences = append(experiences, &experience)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return experiences, nil
 }

@@ -47,3 +47,18 @@ func (app *application) createExperienceHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 }
+
+func (app *application) listExperiencesHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	experiences, err := app.store.Experiences.List(ctx)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := app.jsonResponse(w, http.StatusOK, experiences); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+}

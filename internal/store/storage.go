@@ -8,6 +8,7 @@ import (
 type Storage struct {
 	Experiences interface {
 		Create(context.Context, *Experience) error
+		List(context.Context) ([]*Experience, error)
 	}
 }
 
