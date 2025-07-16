@@ -8,7 +8,7 @@ import (
 )
 
 type Experience struct {
-	ID          int64    `json:"id"`
+	ID          string   `json:"id"`
 	Title       string   `json:"title"`
 	Description []string `json:"description"`
 	Company     string   `json:"company"`
@@ -65,4 +65,24 @@ func (s *ExperiencesStore) List(ctx context.Context) ([]*Experience, error) {
 	}
 
 	return experiences, nil
+}
+
+func (s *ExperiencesStore) Get(ctx context.Context, id string) (*Experience, error) {
+	query := `SELECT id, title, description, company, start_date, end_date, created_at, updated_at 
+			  FROM experiences WHERE id = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	var experience Experience
+	if err := s.db.QueryRowContext(ctx, query, id).Scan(&experience.ID, &experience.Title, pq.Array(&experience.Description),
+		&experience.Company, &experience.StartDate, &experience.EndDate,
+		&experience.CreatedAt, &experience.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &experience, nil
 }

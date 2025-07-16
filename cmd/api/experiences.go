@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/vatanak10/portfolio-backend/internal/store"
 )
 
@@ -58,6 +59,23 @@ func (app *application) listExperiencesHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := app.jsonResponse(w, http.StatusOK, experiences); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+}
+
+func (app *application) getExperienceHandler(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	ctx := r.Context()
+
+	experience, err := app.store.Experiences.Get(ctx, id)
+	if err != nil {
+		app.notFoundResponse(w, r, err)
+		return
+	}
+
+	if err := app.jsonResponse(w, http.StatusOK, experience); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

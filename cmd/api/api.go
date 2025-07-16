@@ -46,7 +46,7 @@ func (app *application) mount() http.Handler {
 		r.Route("/experiences", func(r chi.Router) {
 			r.Post("/", app.createExperienceHandler)
 			r.Get("/", app.listExperiencesHandler)
-			// r.Get("/{id}", app.getExperienceHandler)
+			r.Get("/{id}", app.getExperienceHandler)
 			// r.Put("/{id}", app.updateExperienceHandler)
 			// r.Delete("/{id}", app.deleteExperienceHandler)
 		})
