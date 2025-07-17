@@ -1,4 +1,36 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+        COMMIT_SHA: local
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    container_name: portfolio-api
+    depends_on:
+      - db
+    environment:
+      ADDR: ":8080"
+      DB_ADDR: "postgres://admin:password@db:5432/portfolio?sslmode=disable"
+      DB_MAX_OPEN_CONNS: 30
+      DB_MAX_IDLE_CONNS: 30
+      DB_MAX_IDLE_TIME: "15m"
+      LOG_LEVEL: debug
+    ports:
+      - "8080:8080"
+    # Note: Volume mounts with distroless images can be tricky
+    # For development with hot-reload, consider using a different base image
+    # volumes:
+    #   - ./:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/api", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   db:
     image: postgres:16.3
     container_name: postgres-db
@@ -11,6 +43,12 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d portfolio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   db_data:
