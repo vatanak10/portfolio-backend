@@ -1,0 +1,248 @@
+#cloud-config
+
+# Update system packages
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  - docker.io
+  - docker-compose
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+  - curl
+  - wget
+  - unzip
+  - jq
+
+# Configure Docker
+runcmd:
+  # Start and enable Docker
+  - systemctl start docker
+  - systemctl enable docker
+
+  # Add ubuntu user to docker group
+  - usermod -aG docker ubuntu
+
+  # Install Docker Compose (latest version)
+  - curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  - chmod +x /usr/local/bin/docker-compose
+
+  # Create application directory
+  - mkdir -p /opt/portfolio
+  - chown ubuntu:ubuntu /opt/portfolio
+
+  # Create environment file
+  - |
+    cat > /opt/portfolio/.env << EOF
+    ADDR=:${app_port}
+    DB_ADDR=${db_connection_string}
+    DB_MAX_OPEN_CONNS=30
+    DB_MAX_IDLE_CONNS=30
+    DB_MAX_IDLE_TIME=15m
+    LOG_LEVEL=info
+    ENVIRONMENT=${environment}
+    EOF
+
+  # Create docker-compose file for the application
+  - |
+    cat > /opt/portfolio/docker-compose.yml << EOF
+    version: '3.8'
+
+    services:
+      app:
+        image: ${registry_endpoint}/portfolio-backend:latest
+        container_name: portfolio-app
+        restart: unless-stopped
+        ports:
+          - "${app_port}:${app_port}"
+        env_file:
+          - .env
+        healthcheck:
+          test: ["CMD", "/app/api", "health"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+        logging:
+          driver: "json-file"
+          options:
+            max-size: "10m"
+            max-file: "3"
+    EOF
+
+  # Create systemd service for the application
+  - |
+    cat > /etc/systemd/system/portfolio.service << EOF
+    [Unit]
+    Description=Portfolio Backend Application
+    Requires=docker.service
+    After=docker.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    WorkingDirectory=/opt/portfolio
+    ExecStart=/usr/local/bin/docker-compose up -d
+    ExecStop=/usr/local/bin/docker-compose down
+    TimeoutStartSec=0
+    User=ubuntu
+    Group=ubuntu
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+  # Create deployment script
+  - |
+    cat > /opt/portfolio/deploy.sh << 'EOF'
+    #!/bin/bash
+    set -e
+
+    echo "Starting deployment..."
+
+    # Pull latest image
+    docker-compose pull
+
+    # Stop current container
+    docker-compose down
+
+    # Start new container
+    docker-compose up -d
+
+    # Wait for health check
+    echo "Waiting for application to be healthy..."
+    for i in {1..30}; do
+        if curl -f http://localhost:${app_port}/health > /dev/null 2>&1; then
+            echo "Application is healthy!"
+            break
+        fi
+        echo "Attempt $i/30: Application not ready yet..."
+        sleep 10
+    done
+
+    # Clean up old images
+    docker image prune -f
+
+    echo "Deployment completed successfully!"
+    EOF
+
+  # Make deployment script executable
+  - chmod +x /opt/portfolio/deploy.sh
+  - chown ubuntu:ubuntu /opt/portfolio/deploy.sh
+
+  # Create log rotation for application logs
+  - |
+    cat > /etc/logrotate.d/portfolio << EOF
+    /opt/portfolio/logs/*.log {
+        daily
+        missingok
+        rotate 7
+        compress
+        delaycompress
+        notifempty
+        copytruncate
+    }
+    EOF
+
+  # Create logs directory
+  - mkdir -p /opt/portfolio/logs
+  - chown ubuntu:ubuntu /opt/portfolio/logs
+
+  # Configure nginx
+  - |
+    cat > /etc/nginx/sites-available/portfolio << EOF
+    server {
+        listen 80;
+        server_name ${domain_name != "" ? domain_name : "_"};
+        
+        location / {
+            proxy_pass http://localhost:${app_port};
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+        
+        location /health {
+            proxy_pass http://localhost:${app_port}/health;
+            access_log off;
+        }
+    }
+    EOF
+  
+  # Enable nginx site
+  - ln -sf /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/
+  - rm -f /etc/nginx/sites-enabled/default
+  - systemctl enable nginx
+  - systemctl start nginx
+  
+  # Setup SSL if domain is provided
+  - |
+    if [ "${domain_name}" != "" ]; then
+      # Wait for nginx to be ready
+      sleep 10
+      # Get SSL certificate
+      certbot --nginx -d ${domain_name} --non-interactive --agree-tos --email admin@${domain_name} --redirect
+      # Setup auto-renewal
+      systemctl enable certbot.timer
+      systemctl start certbot.timer
+    fi
+  
+  # Enable and start the portfolio service
+  - systemctl daemon-reload
+  - systemctl enable portfolio.service
+
+  # Create a simple health check endpoint for load balancer
+  - |
+    cat > /opt/portfolio/health-check.sh << 'EOF'
+    #!/bin/bash
+    # Simple health check script that can be used by monitoring systems
+    curl -f http://localhost:${app_port}/health || exit 1
+    EOF
+
+  - chmod +x /opt/portfolio/health-check.sh
+  - chown ubuntu:ubuntu /opt/portfolio/health-check.sh
+
+# Set file permissions
+write_files:
+  - path: /opt/portfolio/README.md
+    content: |
+      # Portfolio Backend Deployment
+
+      This directory contains the deployed Portfolio Backend application.
+
+      ## Files:
+      - `.env`: Environment variables
+      - `docker-compose.yml`: Docker Compose configuration
+      - `deploy.sh`: Deployment script
+      - `health-check.sh`: Health check script
+
+      ## Commands:
+      - Deploy: `./deploy.sh`
+      - Check status: `docker-compose ps`
+      - View logs: `docker-compose logs -f`
+      - Health check: `./health-check.sh`
+
+      ## Service Management:
+      - Start: `sudo systemctl start portfolio`
+      - Stop: `sudo systemctl stop portfolio`
+      - Status: `sudo systemctl status portfolio`
+    owner: ubuntu:ubuntu
+    permissions: "0644"
+
+# Final commands
+final_message: |
+  Portfolio Backend server setup completed!
+
+  The application will be available at:
+  - Local: http://localhost:${app_port}
+  - Health check: http://localhost:${app_port}/health
+
+  To deploy the application:
+  1. Push your Docker image to the registry: ${registry_endpoint}/portfolio-backend:latest
+  2. SSH to the server and run: cd /opt/portfolio && ./deploy.sh
+
+  Logs can be found in /opt/portfolio/logs/
+  Service status: sudo systemctl status portfolio

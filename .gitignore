@@ -1,1 +1,4 @@
 bin
+
+# terraform variables
+terraform/terraform.tfvars

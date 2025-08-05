@@ -1,0 +1,29 @@
+# DigitalOcean Configuration
+do_token = "your-digitalocean-api-token-here"
+ssh_key_name = "your-ssh-key-name"
+
+# Database Configuration (External Database)
+external_database_url = "postgres://admin:password@localhost:5432/portfolio?sslmode=disable"
+
+# Project Configuration
+project_name = "portfolio"
+environment = "prod"
+region = "sgp1"
+
+# Droplet Configuration
+droplet_size = "s-1vcpu-1gb"
+
+# Application Configuration
+app_port = "8080"
+
+# Security Configuration
+allowed_ssh_ips = [
+  "your.ip.address.here/32",
+  # "192.168.1.0/24",         # Example: Allow entire local network
+]
+
+# Domain Configuration (Optional)
+# domain_name = "api.yourdomain.com"
+
+# Container Registry Configuration
+registry_subscription_tier = "starter"
