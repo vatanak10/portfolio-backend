@@ -1,4 +1,8 @@
 bin
 
-# terraform variables
-terraform/terraform.tfvars
+# terraform
+*.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json

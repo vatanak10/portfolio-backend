@@ -132,8 +132,8 @@ deploy_to_server() {
     log_info "Deploying to server: $DROPLET_IP"
     
     # SSH to server and run deployment
-    ssh -o StrictHostKeyChecking=no ubuntu@"$DROPLET_IP" << EOF
-        cd /opt/portfolio
+    ssh -o StrictHostKeyChecking=no root@"$DROPLET_IP" << EOF
+        cd /opt/portfolio/
         ./deploy.sh
 EOF
     

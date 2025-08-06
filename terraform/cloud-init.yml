@@ -29,9 +29,26 @@ runcmd:
   - curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
   - chmod +x /usr/local/bin/docker-compose
 
+  # Install doctl for registry authentication
+  - wget -q https://github.com/digitalocean/doctl/releases/latest/download/doctl-1.135.0-linux-amd64.tar.gz
+  - tar xf doctl-1.135.0-linux-amd64.tar.gz
+  - mv doctl /usr/local/bin/
+  - chmod +x /usr/local/bin/doctl
+
   # Create application directory
   - mkdir -p /opt/portfolio
   - chown ubuntu:ubuntu /opt/portfolio
+
+  # Authenticate with DigitalOcean Container Registry
+  - echo "${do_token}" | doctl auth init --access-token-stdin
+  - doctl registry login
+
+  # Make sure ubuntu user can access docker registry
+  - cp /root/.docker/config.json /home/ubuntu/.docker/config.json || true
+  - mkdir -p /home/ubuntu/.docker
+  - doctl registry login --expiry-seconds 3600
+  - cp /root/.docker/config.json /home/ubuntu/.docker/config.json
+  - chown -R ubuntu:ubuntu /home/ubuntu/.docker
 
   # Create environment file
   - |
@@ -96,29 +113,36 @@ runcmd:
 
   # Create deployment script
   - |
-    cat > /opt/portfolio/deploy.sh << 'EOF'
+    cat > /opt/portfolio/deploy.sh << EOF
     #!/bin/bash
     set -e
 
     echo "Starting deployment..."
 
+    # Re-authenticate with registry (in case token expired)
+    echo "Authenticating with container registry..."
+    doctl registry login --expiry-seconds 3600
+
     # Pull latest image
+    echo "Pulling latest image..."
     docker-compose pull
 
     # Stop current container
+    echo "Stopping current container..."
     docker-compose down
 
     # Start new container
+    echo "Starting new container..."
     docker-compose up -d
 
     # Wait for health check
     echo "Waiting for application to be healthy..."
     for i in {1..30}; do
-        if curl -f http://localhost:${app_port}/health > /dev/null 2>&1; then
+        if curl -f http://localhost:${app_port}/v1/health > /dev/null 2>&1; then
             echo "Application is healthy!"
             break
         fi
-        echo "Attempt $i/30: Application not ready yet..."
+        echo "Attempt \$i/30: Application not ready yet..."
         sleep 10
     done
 
@@ -171,13 +195,13 @@ runcmd:
         }
     }
     EOF
-  
+
   # Enable nginx site
   - ln -sf /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/
   - rm -f /etc/nginx/sites-enabled/default
   - systemctl enable nginx
   - systemctl start nginx
-  
+
   # Setup SSL if domain is provided
   - |
     if [ "${domain_name}" != "" ]; then
@@ -189,14 +213,14 @@ runcmd:
       systemctl enable certbot.timer
       systemctl start certbot.timer
     fi
-  
+
   # Enable and start the portfolio service
   - systemctl daemon-reload
   - systemctl enable portfolio.service
 
-  # Create a simple health check endpoint for load balancer
+  # Create a simple health check endpoint
   - |
-    cat > /opt/portfolio/health-check.sh << 'EOF'
+    cat > /opt/portfolio/health-check.sh << EOF
     #!/bin/bash
     # Simple health check script that can be used by monitoring systems
     curl -f http://localhost:${app_port}/health || exit 1
@@ -204,6 +228,38 @@ runcmd:
 
   - chmod +x /opt/portfolio/health-check.sh
   - chown ubuntu:ubuntu /opt/portfolio/health-check.sh
+
+  # Create troubleshooting script
+  - |
+    cat > /opt/portfolio/debug.sh << EOF
+    #!/bin/bash
+    echo "=== Portfolio Backend Debug Information ==="
+    echo "Date: \$(date)"
+    echo ""
+    echo "=== Files in /opt/portfolio ==="
+    ls -la /opt/portfolio/
+    echo ""
+    echo "=== Docker containers ==="
+    docker ps -a
+    echo ""
+    echo "=== Docker images ==="
+    docker images
+    echo ""
+    echo "=== Application logs ==="
+    docker-compose logs --tail=50
+    echo ""
+    echo "=== System service status ==="
+    systemctl status portfolio
+    echo ""
+    echo "=== Nginx status ==="
+    systemctl status nginx
+    echo ""
+    echo "=== Environment variables ==="
+    cat /opt/portfolio/.env
+    EOF
+
+  - chmod +x /opt/portfolio/debug.sh
+  - chown ubuntu:ubuntu /opt/portfolio/debug.sh
 
 # Set file permissions
 write_files:

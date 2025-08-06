@@ -17,6 +17,19 @@ data "digitalocean_ssh_key" "main" {
   name = var.ssh_key_name
 }
 
+# Tags - Create tags before using them in resources
+resource "digitalocean_tag" "environment" {
+  name = var.environment
+}
+
+resource "digitalocean_tag" "app" {
+  name = "app"
+}
+
+resource "digitalocean_tag" "firewall" {
+  name = "firewall"
+}
+
 # Container Registry
 resource "digitalocean_container_registry" "portfolio" {
   name                   = "${var.project_name}-registry"
@@ -42,17 +55,20 @@ resource "digitalocean_droplet" "app" {
   ssh_keys = [data.digitalocean_ssh_key.main.id]
 
   user_data = templatefile("${path.module}/cloud-init.yml", {
-    registry_endpoint = digitalocean_container_registry.portfolio.endpoint
+    registry_endpoint    = digitalocean_container_registry.portfolio.endpoint
     db_connection_string = var.external_database_url
-    app_port         = var.app_port
-    environment      = var.environment
-    domain_name      = var.domain_name
+    app_port             = var.app_port
+    environment          = var.environment
+    domain_name          = var.domain_name
+    do_token             = var.do_token
   })
 
-  tags = [var.environment, "app"]
+  tags = [digitalocean_tag.environment.name, digitalocean_tag.app.name]
 
   depends_on = [
-    digitalocean_container_registry.portfolio
+    digitalocean_container_registry.portfolio,
+    digitalocean_tag.environment,
+    digitalocean_tag.app
   ]
 }
 
@@ -108,5 +124,10 @@ resource "digitalocean_firewall" "app_firewall" {
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 
-  tags = [var.environment, "firewall"]
+  tags = [digitalocean_tag.environment.name, digitalocean_tag.firewall.name]
+
+  depends_on = [
+    digitalocean_tag.environment,
+    digitalocean_tag.firewall
+  ]
 }
